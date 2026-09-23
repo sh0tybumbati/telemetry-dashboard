@@ -93,6 +93,47 @@
 // file. Nothing else in this dashboard is game-specific.
 // ═══════════════════════════════════════════════════════════════════════════
 const GAMES = {
+  'feature-creep': {
+    title: 'Feature Creep',
+    unit: 'draw',
+    noUnderwater: true,
+    panels: [
+      { view:'p_fc_funnel', title:'Progression funnel', wide:true,
+        sub:'How far runs get. The big drop is where the game loses people.',
+        render:r => funnel(r, ['started','opened_pack','bought_feature','shipped_feature','bought_pack','shipped_ten']) },
+
+      { view:'p_fc_gold', title:'Economy over a run', wide:true,
+        sub:'Median gold at each 10-draw snapshot.',
+        render:r => lineChart(r.slice().sort((a,b)=>a.draw-b.draw), {x:'draw', y:'median_gold'}) },
+
+      { view:'p_fc_length', title:'Run length',
+        sub:'Creep cards drawn per run.',
+        render:r => barList(r.slice().sort((a,b)=>a.sort_key-b.sort_key).map(d=>[d.bucket, +d.runs]), {fmt:n=>n+' runs'}) },
+
+      { view:'p_fc_stuck', title:'Out of creep cards',
+        sub:'Runs that emptied deck and discard, and whether they found the pack shop.',
+        render:r => {
+          const d = r[0]; if (!d || !+d.runs) return h('div', { class:'empty' }, 'No data yet');
+          return barList([
+            ['got stuck', +d.got_stuck],
+            ['…and never bought a pack', +d.stuck_never_bought_pack],
+          ], {fmt:n=>`${n}  ${Math.round(100*n/Math.max(1,+d.runs))}%`});
+        } },
+
+      { view:'p_fc_shipped_rarity', title:'Shipped by rarity',
+        sub:'What players build, and what it pays.',
+        render:r => scroll(table(r.slice().sort((a,b)=>b.shipped-a.shipped), [
+          ['rarity','Rarity'], ['shipped','Shipped',1], ['mean_gold','Mean gold',1]])) },
+
+      { view:'p_fc_mechanics', title:'Optional mechanics',
+        sub:'Share of runs that ever used each one.',
+        render:r => barList(r.map(d=>[d.mechanic, Math.round(100*d.runs_using/Math.max(1,d.total_runs))]), {fmt:n=>n+'%'}) },
+
+      { view:'p_fc_returns', title:'Return sessions',
+        sub:'How many players started more than one run.',
+        render:r => barList(r.map(d=>[`${d.sessions} run${d.sessions>1?'s':''}`, +d.players]), {fmt:n=>n+' players'}) },
+    ],
+  },
   'silicon-tycoon': {
     title: 'Silicon Tycoon',
     unit: 'week',
@@ -540,7 +581,8 @@ async function dashboard(gameId) {
     const under = runs.filter(r => r.went_underwater).length;
     for (const [k, v] of [['Runs', runs.length], ['Last 7 days', recent],
                           [`Median ${spec?.unit || 'progress'}s`, med],
-                          ['Went underwater', runs.length ? Math.round(100 * under / runs.length) + '%' : '—']])
+                          // Only meaningful for games with a balance that can go negative.
+                          ...(spec?.noUnderwater ? [] : [['Went underwater', runs.length ? Math.round(100 * under / runs.length) + '%' : '—']])])
       strip.append(h('div', { class:'stat' }, h('div', { class:'v' }, v), h('div', { class:'k' }, k)));
   } catch { /* strip is a nicety */ }
 
