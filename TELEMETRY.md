@@ -102,6 +102,9 @@ Flapjacks runs and checks every panel of the Flapjacks tab draws.
 2. Add a `sql/panels-<game>.sql` with views named `p_<prefix>_*`, and grant
    select on them to `authenticated`.
 3. Add an entry to the `GAMES` registry at the top of `dashboard/index.html`.
+4. Copy `dashboard/index.html` (and this file) into the `sh0tybumbati/telemetry-dashboard`
+   repo and push it. That repo is the hosted copy at sh0tybumbati.github.io/telemetry-dashboard,
+   and it only changes when it's synced by hand.
 
 Game-specific fields live in the `meta` and `props` jsonb columns, so no
 migration is needed. Add a guarded CHECK constraint for the new game's values,
