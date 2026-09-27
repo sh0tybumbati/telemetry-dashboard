@@ -134,6 +134,43 @@ const GAMES = {
         render:r => barList(r.map(d=>[`${d.sessions} run${d.sessions>1?'s':''}`, +d.players]), {fmt:n=>n+' players'}) },
     ],
   },
+  'flapjacks': {
+    title: 'Flapjacks',
+    unit: 'day',
+    noUnderwater: true,
+    panels: [
+      { view:'p_fj_funnel', title:'Progression funnel', wide:true,
+        sub:'How far runs get: the first day, the first rent, leaving the truck, the brunch house.',
+        render:r => funnel(r, ['started','finished_day_1','reached_first_rent','paid_first_rent','moved_out_of_truck','reached_brunch_house']) },
+
+      { view:'p_fj_income', title:'What a day earns', wide:true,
+        sub:'Median pay plus tips on each day of a run.',
+        render:r => lineChart(r.slice().sort((a,b)=>a.day-b.day), {x:'day', y:'median_income'}) },
+
+      { view:'p_fj_length', title:'Run length',
+        sub:'Days played per run. The first rent is due at the end of day 5.',
+        render:r => barList(r.slice().sort((a,b)=>a.sort_key-b.sort_key).map(d=>[d.bucket, +d.runs]), {fmt:n=>n+' runs'}) },
+
+      { view:'p_fj_endings', title:'Where runs end',
+        sub:'The venue a closed run was at, with its mean days and score.',
+        render:r => scroll(table(r.slice().sort((a,b)=>b.runs-a.runs), [
+          ['venue','Venue'], ['runs','Runs',1], ['mean_days','Mean days',1], ['mean_score','Mean score',1]])) },
+
+      { view:'p_fj_shop', title:'The shop',
+        sub:'What players buy, how many runs buy it, and how early.',
+        render:r => scroll(table(r.slice().sort((a,b)=>b.bought-a.bought), [
+          ['item','Item'], ['bought','Bought',1], ['runs','Runs',1], ['mean_day','Mean day',1], ['trade_ins','Trade-ins',1]])) },
+
+      { view:'p_fj_walkouts', title:'Walkouts by week',
+        sub:'Mean walkouts per shift, and shifts cut short by three.',
+        render:r => scroll(table(r.slice().sort((a,b)=>a.week-b.week), [
+          ['week','Week',1], ['shifts','Shifts',1], ['mean_walkouts','Mean walkouts',1], ['cut_short','Cut short',1]])) },
+
+      { view:'p_fj_returns', title:'Return sessions',
+        sub:'How many players started more than one run.',
+        render:r => barList(r.map(d=>[`${d.sessions} run${d.sessions>1?'s':''}`, +d.players]), {fmt:n=>n+' players'}) },
+    ],
+  },
   'silicon-tycoon': {
     title: 'Silicon Tycoon',
     unit: 'week',

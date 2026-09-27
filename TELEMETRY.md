@@ -73,6 +73,29 @@ write but not read, and that the dashboard's role can read every view. Grants on
 views are separate from grants on tables, and missing them was a real bug caught
 by that harness.
 
+## Feature Creep
+
+Feature Creep reports to the same project. Its client is
+`feature-creep/src/lib/telemetry.ts` (disabled in dev builds), and its views
+live in `sql/panels-feature-creep.sql`. Run that file once in the Supabase SQL
+editor after `setup-all.sql`; it registers the game, adds its CHECK
+constraints and creates the `p_fc_*` panels. Until it runs, the game's inserts
+fail the `games` foreign key and sit in the player's retry buffer.
+
+## Flapjacks
+
+Flapjacks reports to the same project. Its client is
+`Flapjacks/src/lib/telemetry.ts`, copied from Feature Creep's and silent in dev
+builds. It sends a new run, each day's end (venue, pay plus tips, plates,
+walkouts, cash), rent paid, moves, shop purchases and the end of a run with its
+score. Progress is the day. Its views live in `sql/panels-flapjacks.sql`: run
+that file once in the Supabase SQL editor after `setup-all.sql`. Until it runs,
+the game's inserts fail the `games` foreign key and sit in the player's retry
+buffer.
+
+`npm run verify:dashboard:flapjacks` loads the panels into the mock, seeds
+Flapjacks runs and checks every panel of the Flapjacks tab draws.
+
 ## Adding a game
 
 1. Add a row to `games`.
