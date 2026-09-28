@@ -5,92 +5,199 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Game Telemetry</title>
 <style>
+  /* ── Tokens ────────────────────────────────────────────────────────────────
+     Chart colours follow the dataviz reference palette, validated with its
+     script for both modes (4 categorical slots: all checks pass; light-mode
+     aqua and yellow sit under 3:1, so every chart ships direct labels or a
+     table view). Colours are assigned to entities, never to rank: a
+     difficulty keeps its colour on every chart and after every filter. */
   :root {
-    --bg:#0e1116; --panel:#161b22; --line:#242c38; --fg:#e6edf3; --dim:#8b949e;
-    --accent:#2f81f7; --good:#3fb950; --warn:#d29922; --bad:#f85149;
-    --c1:#2f81f7; --c2:#3fb950; --c3:#d29922; --c4:#db61a2; --c5:#a371f7;
+    color-scheme: light;
+    --page:#f9f9f7; --surface:#fcfcfb; --raise:#ffffff;
+    --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10); --wash:rgba(11,11,11,.04);
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300;
+    --seq:#2a78d6; --seq-2:#86b6ef;
+    --good:#0ca30c; --good-text:#006300; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+    --accent:#2a78d6;
   }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page:#0d0d0d; --surface:#1a1a19; --raise:#222221;
+      --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+      --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10); --wash:rgba(255,255,255,.05);
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300;
+      --seq:#3987e5; --seq-2:#184f95;
+      --good-text:#0ca30c; --accent:#3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --raise:#222221;
+    --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10); --wash:rgba(255,255,255,.05);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300;
+    --seq:#3987e5; --seq-2:#184f95;
+    --good-text:#0ca30c; --accent:#3987e5;
+  }
+
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg);
-         font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
-  header { display:flex; align-items:center; gap:16px; flex-wrap:wrap;
-           padding:14px 20px; border-bottom:1px solid var(--line); background:var(--panel);
-           position:sticky; top:0; z-index:10; }
-  header h1 { font-size:15px; margin:0; font-weight:600; letter-spacing:.02em; }
-  header .spacer { flex:1; }
-  select, button, input {
-    background:#0d1117; color:var(--fg); border:1px solid var(--line);
-    border-radius:6px; padding:7px 11px; font:inherit; font-size:13px; }
-  button { cursor:pointer; }
-  button:hover { border-color:var(--accent); }
+  body { margin:0; background:var(--page); color:var(--ink);
+         font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  button, select, input { font:inherit; font-size:13px; color:var(--ink); }
+  select, input[type=search], input[type=text], input[type=email], input[type=password] {
+    background:var(--surface); border:1px solid var(--ring); border-radius:8px; padding:7px 10px; }
+  button { background:var(--surface); border:1px solid var(--ring); border-radius:8px;
+           padding:7px 12px; cursor:pointer; }
+  button:hover { background:var(--wash); }
+  button:focus-visible, select:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+    outline:2px solid var(--accent); outline-offset:2px; }
   button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+
+  /* ── Frame ─────────────────────────────────────────────────────────────── */
+  header { position:sticky; top:0; z-index:20; background:var(--surface);
+           border-bottom:1px solid var(--ring); }
+  .bar { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+         padding:10px 20px; max-width:1500px; margin:0 auto; }
+  .brand { font-weight:650; letter-spacing:.01em; margin-right:4px; }
+  .spacer { flex:1; }
+  .updated { color:var(--muted); font-size:12px; }
+  .tabs { display:flex; gap:2px; padding:0 20px; max-width:1500px; margin:0 auto; }
+  .tab { background:none; border:none; border-bottom:2px solid transparent; border-radius:0;
+         padding:8px 12px 9px; color:var(--ink-2); font-weight:600; }
+  .tab[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--accent); }
+  .tab:hover { background:var(--wash); }
   main { padding:20px; max-width:1500px; margin:0 auto; }
+  main.refetching { opacity:.5; transition:opacity .15s; }
+  [hidden] { display:none !important; }
 
-  .login { max-width:420px; margin:8vh auto; background:var(--panel);
-           border:1px solid var(--line); border-radius:12px; padding:28px; }
-  .login h2 { margin:0 0 6px; font-size:18px; }
-  .login p  { margin:0 0 20px; color:var(--dim); font-size:13px; }
-  .login label { display:block; font-size:12px; color:var(--dim); margin:12px 0 5px; }
-  .login input { width:100%; }
-  .login button { width:100%; margin-top:20px; padding:10px; }
-  .err { color:var(--bad); font-size:12.5px; margin-top:12px; white-space:pre-wrap; }
-  .hint { color:var(--dim); font-size:11.5px; margin-top:14px; line-height:1.6; }
+  .filters { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  .seg { display:inline-flex; background:var(--surface); border:1px solid var(--ring);
+         border-radius:8px; padding:2px; }
+  .seg button { border:none; background:none; border-radius:6px; padding:5px 11px; color:var(--ink-2); }
+  .seg button[aria-pressed="true"] { background:var(--wash); color:var(--ink); font-weight:600; }
+  .scope { color:var(--muted); font-size:12px; }
+  .scope b { color:var(--ink-2); font-weight:600; }
 
-  .strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
-           gap:12px; margin-bottom:20px; }
-  .stat { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
-  .stat .v { font-size:26px; font-weight:650; letter-spacing:-.02em; }
-  .stat .k { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
+  h2.section { font-size:12px; font-weight:650; color:var(--ink-2); text-transform:uppercase;
+               letter-spacing:.07em; margin:26px 0 10px; }
+  h2.section:first-child { margin-top:4px; }
 
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(430px,1fr));
-          gap:16px; align-items:start; }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  /* ── Stat tiles ────────────────────────────────────────────────────────── */
+  .strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin-bottom:16px; }
+  .stat { background:var(--surface); border:1px solid var(--ring); border-radius:12px;
+          padding:14px 16px 12px; min-width:0; }
+  .stat .k { font-size:12px; color:var(--ink-2); }
+  .stat .v { font-size:28px; font-weight:650; letter-spacing:-.02em; line-height:1.2; margin-top:2px; }
+  .stat .d { font-size:12px; color:var(--muted); margin-top:2px; }
+  .stat .d .up   { color:var(--good-text); font-weight:600; }
+  .stat .d .down { color:var(--critical); font-weight:600; }
+  .stat svg { margin-top:8px; }
+
+  /* ── Cards ─────────────────────────────────────────────────────────────── */
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(440px,1fr)); gap:14px; align-items:start; }
+  /* Insights: two columns, and each section is arranged to fill its rows. */
+  .grid.two { grid-template-columns:repeat(auto-fit,minmax(560px,1fr)); }
+  .card { background:var(--surface); border:1px solid var(--ring); border-radius:12px;
           padding:16px 18px; min-width:0; }
   .card.wide { grid-column:1/-1; }
-  .card h3 { margin:0 0 3px; font-size:14px; font-weight:600; }
-  .card .sub { color:var(--dim); font-size:12px; margin:0 0 14px; }
+  .card-head { display:flex; align-items:flex-start; gap:10px; }
+  .card-head > div { flex:1; min-width:0; }
+  .card h3 { margin:0; font-size:14px; font-weight:650; }
+  .card .sub { color:var(--ink-2); font-size:12.5px; margin:2px 0 12px; }
   .card .body { overflow-x:auto; }
-  .empty { color:var(--dim); font-size:13px; padding:20px 0; text-align:center; }
+  .viewtoggle { font-size:11.5px; padding:3px 8px; color:var(--ink-2); flex:none; }
+  .empty { color:var(--muted); font-size:13px; padding:22px 0; text-align:center; }
+  .err { color:var(--critical); font-size:12.5px; white-space:pre-wrap; }
 
+  /* ── Tables ────────────────────────────────────────────────────────────── */
   table { border-collapse:collapse; width:100%; min-width:max-content; font-size:12.5px; }
-  th { text-align:left; color:var(--dim); font-weight:600; padding:5px 10px 5px 0;
-       border-bottom:1px solid var(--line); white-space:nowrap; font-size:11px;
-       text-transform:uppercase; letter-spacing:.05em; }
-  td { padding:5px 10px 5px 0; border-bottom:1px solid #1b222c; white-space:nowrap; }
+  th { text-align:left; color:var(--ink-2); font-weight:600; font-size:11.5px; padding:6px 12px 6px 0;
+       border-bottom:1px solid var(--axis); white-space:nowrap; position:sticky; top:0; background:var(--surface); }
+  th.sortable { cursor:pointer; user-select:none; }
+  th.sortable:hover { color:var(--ink); }
+  th .arrow { color:var(--muted); font-size:10px; margin-left:3px; }
+  td { padding:6px 12px 6px 0; border-bottom:1px solid var(--grid); white-space:nowrap; }
   td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
-  .scroll { max-height:340px; overflow-y:auto; }
-  .legend { display:flex; gap:14px; flex-wrap:wrap; margin-bottom:8px; font-size:11.5px; color:var(--dim); }
-  .legend i { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px; }
-  .bar-row { display:grid; grid-template-columns:130px 1fr 62px; gap:10px; align-items:center;
-             margin-bottom:5px; font-size:12.5px; }
-  .bar-track { background:#0d1117; border-radius:3px; height:17px; overflow:hidden; }
-  .bar-fill  { height:100%; border-radius:3px; }
-  .muted { color:var(--dim); }
-  svg { display:block; max-width:100%; }
+  .scroll { max-height:360px; overflow-y:auto; }
+  .runlist tbody tr { cursor:pointer; }
+  .runlist tbody tr:hover td, .runlist tbody tr:focus td { background:var(--wash); }
+  .muted { color:var(--muted); }
 
-  .runlist tr { cursor:pointer; }
-  .runlist tr:hover td { background:#1c2531; }
-  .backlink { background:none; border:none; color:var(--accent); cursor:pointer;
-              padding:0; font:inherit; font-size:13px; }
-  .backlink:hover { text-decoration:underline; }
-  .meta { display:flex; gap:22px; flex-wrap:wrap; margin:2px 0 18px;
-          font-size:12.5px; color:var(--dim); }
-  .meta b { color:var(--fg); font-weight:600; }
+  /* ── Horizontal bars (magnitude: one hue) ─────────────────────────────── */
+  .bars { display:flex; flex-direction:column; gap:2px; }
+  .bar-row { display:grid; grid-template-columns:minmax(90px,150px) 1fr 76px; gap:10px;
+             align-items:center; font-size:12.5px; padding:2px 0; border-radius:6px; }
+  .bar-row:hover, .bar-row:focus { background:var(--wash); outline:none; }
+  .bar-row .lab { color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bar-row .val { text-align:right; font-variant-numeric:tabular-nums; }
+  .bar-track { height:14px; }
+  .bar-fill  { height:100%; background:var(--seq); border-radius:0 4px 4px 0; min-width:2px; }
+
+  /* ── Funnel (small multiples) ─────────────────────────────────────────── */
+  .multiples { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; }
+  .mult-title { display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:650; margin-bottom:6px; }
+  .key { display:inline-block; width:14px; height:2px; border-radius:1px; }
+  .keybox { display:inline-block; width:10px; height:10px; border-radius:2px; }
+  .step { font-size:11px; color:var(--muted); padding:0 0 0 2px; }
+  .step.worst { color:var(--ink-2); font-weight:600; }
+  .step.worst::before { content:"▼ "; color:var(--serious); }
+
+  .legend { display:flex; gap:16px; flex-wrap:wrap; margin:0 0 8px; font-size:12px; color:var(--ink-2); }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+
+  /* ── Share bar ────────────────────────────────────────────────────────── */
+  .share { display:flex; gap:2px; height:22px; margin:4px 0 12px; }
+  .share div { border-radius:4px; min-width:3px; }
+  .share div:hover, .share div:focus { filter:brightness(1.12); outline:none; }
+
+  /* ── Tooltip ──────────────────────────────────────────────────────────── */
+  #tip { position:fixed; z-index:50; pointer-events:none; background:var(--raise); color:var(--ink);
+         border:1px solid var(--ring); border-radius:8px; padding:8px 10px; font-size:12px;
+         box-shadow:0 6px 20px rgba(0,0,0,.18); min-width:120px; }
+  #tip .t { color:var(--ink-2); margin-bottom:4px; }
+  #tip .r { display:flex; align-items:center; gap:8px; }
+  #tip .r b { font-variant-numeric:tabular-nums; }
+  #tip .r span:last-child { color:var(--ink-2); }
+
+  /* ── Login ────────────────────────────────────────────────────────────── */
+  .login { max-width:420px; margin:8vh auto; background:var(--surface); border:1px solid var(--ring);
+           border-radius:14px; padding:28px; }
+  .login h2 { margin:0 0 6px; font-size:18px; }
+  .login p  { margin:0 0 18px; color:var(--ink-2); font-size:13px; }
+  .login label { display:block; font-size:12px; color:var(--ink-2); margin:12px 0 5px; }
+  .login input { width:100%; }
+  .login button { width:100%; margin-top:20px; padding:10px; }
+  .hint { color:var(--muted); font-size:11.5px; margin-top:14px; line-height:1.6; }
+
+  /* ── Run detail ───────────────────────────────────────────────────────── */
+  .backlink { background:none; border:none; color:var(--accent); padding:0; font-size:13px; }
+  .backlink:hover { text-decoration:underline; background:none; }
+  .meta { display:flex; gap:22px; flex-wrap:wrap; margin:2px 0 18px; font-size:12.5px; color:var(--ink-2); }
+  .meta b { color:var(--ink); font-weight:600; }
   .tl { list-style:none; padding:0; margin:0; }
-  .tl li { display:grid; grid-template-columns:72px 1fr; gap:12px; padding:6px 0;
-           border-bottom:1px solid #1b222c; font-size:12.5px; }
-  .tl .w { color:var(--dim); font-variant-numeric:tabular-nums; }
+  .tl li { display:grid; grid-template-columns:78px 1fr; gap:12px; padding:6px 0;
+           border-bottom:1px solid var(--grid); font-size:12.5px; }
+  .tl .w { color:var(--muted); font-variant-numeric:tabular-nums; }
   .tl .ev { font-weight:600; }
-  .tl .px { color:var(--dim); font-weight:400; }
+  .tl .px { color:var(--ink-2); font-weight:400; }
+
+  svg { display:block; max-width:100%; overflow:visible; }
+  svg text { font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .axis { fill:var(--muted); font-size:10.5px; font-variant-numeric:tabular-nums; }
+  .endlab { font-size:11px; font-weight:600; fill:var(--ink-2); }
 </style>
 </head>
 <body>
 <div id="app"></div>
+<div id="tip" hidden></div>
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
-// Game registry. Adding a title = adding one entry here plus its sql/panels
-// file. Nothing else in this dashboard is game-specific.
+// Game registry. Adding a title = one entry here plus its sql/panels file.
+// Panels are grouped into sections on the Insights tab. Everything on the
+// Activity and Runs tabs is computed from v_runs, which every game has.
 // ═══════════════════════════════════════════════════════════════════════════
 const GAMES = {
   'feature-creep': {
@@ -98,38 +205,38 @@ const GAMES = {
     unit: 'draw',
     noUnderwater: true,
     panels: [
-      { view:'p_fc_funnel', title:'Progression funnel', wide:true,
-        sub:'How far runs get. The big drop is where the game loses people.',
+      { section:'Progression', view:'p_fc_funnel', title:'Progression funnel', wide:true,
+        sub:'How far runs get. The marked step is where the most players drop off.',
         render:r => funnel(r, ['started','opened_pack','bought_feature','shipped_feature','bought_pack','shipped_ten']) },
 
-      { view:'p_fc_gold', title:'Economy over a run', wide:true,
-        sub:'Median gold at each 10-draw snapshot.',
-        render:r => lineChart(r.slice().sort((a,b)=>a.draw-b.draw), {x:'draw', y:'median_gold'}) },
-
-      { view:'p_fc_length', title:'Run length',
+      { section:'Progression', view:'p_fc_length', title:'Run length',
         sub:'Creep cards drawn per run.',
         render:r => barList(r.slice().sort((a,b)=>a.sort_key-b.sort_key).map(d=>[d.bucket, +d.runs]), {fmt:n=>n+' runs'}) },
 
-      { view:'p_fc_stuck', title:'Out of creep cards',
+      { section:'Progression', view:'p_fc_stuck', title:'Out of creep cards',
         sub:'Runs that emptied deck and discard, and whether they found the pack shop.',
         render:r => {
-          const d = r[0]; if (!d || !+d.runs) return h('div', { class:'empty' }, 'No data yet');
+          const d = r[0]; if (!d || !+d.runs) return empty();
           return barList([
             ['got stuck', +d.got_stuck],
             ['…and never bought a pack', +d.stuck_never_bought_pack],
-          ], {fmt:n=>`${n}  ${Math.round(100*n/Math.max(1,+d.runs))}%`});
+          ], {fmt:n=>`${n} · ${Math.round(100*n/Math.max(1,+d.runs))}%`});
         } },
 
-      { view:'p_fc_shipped_rarity', title:'Shipped by rarity',
+      { section:'Economy', view:'p_fc_gold', title:'Economy over a run',
+        sub:'Median gold at each 10-draw snapshot.',
+        render:r => lineChart(r.slice().sort((a,b)=>a.draw-b.draw), {x:'draw', y:'median_gold', xLabel:'draw', yLabel:'median gold'}) },
+
+      { section:'Economy', view:'p_fc_shipped_rarity', title:'Shipped by rarity',
         sub:'What players build, and what it pays.',
-        render:r => scroll(table(r.slice().sort((a,b)=>b.shipped-a.shipped), [
-          ['rarity','Rarity'], ['shipped','Shipped',1], ['mean_gold','Mean gold',1]])) },
+        render:r => scroll(table(r, [
+          ['rarity','Rarity'], ['shipped','Shipped',1], ['mean_gold','Mean gold',1]], {sort:'shipped'})) },
 
-      { view:'p_fc_mechanics', title:'Optional mechanics',
+      { section:'Behaviour', view:'p_fc_mechanics', title:'Optional mechanics',
         sub:'Share of runs that ever used each one.',
-        render:r => barList(r.map(d=>[d.mechanic, Math.round(100*d.runs_using/Math.max(1,d.total_runs))]), {fmt:n=>n+'%'}) },
+        render:r => barList(r.map(d=>[d.mechanic, Math.round(100*d.runs_using/Math.max(1,d.total_runs))]), {fmt:n=>n+'%', sort:true}) },
 
-      { view:'p_fc_returns', title:'Return sessions',
+      { section:'Behaviour', view:'p_fc_returns', title:'Return sessions',
         sub:'How many players started more than one run.',
         render:r => barList(r.map(d=>[`${d.sessions} run${d.sessions>1?'s':''}`, +d.players]), {fmt:n=>n+' players'}) },
     ],
@@ -139,34 +246,34 @@ const GAMES = {
     unit: 'day',
     noUnderwater: true,
     panels: [
-      { view:'p_fj_funnel', title:'Progression funnel', wide:true,
-        sub:'How far runs get: the first day, the first rent, leaving the truck, the brunch house.',
+      { section:'Progression', view:'p_fj_funnel', title:'Progression funnel', wide:true,
+        sub:'The first day, the first rent, leaving the truck, the brunch house. The marked step loses the most players.',
         render:r => funnel(r, ['started','finished_day_1','reached_first_rent','paid_first_rent','moved_out_of_truck','reached_brunch_house']) },
 
-      { view:'p_fj_income', title:'What a day earns', wide:true,
-        sub:'Median pay plus tips on each day of a run.',
-        render:r => lineChart(r.slice().sort((a,b)=>a.day-b.day), {x:'day', y:'median_income'}) },
-
-      { view:'p_fj_length', title:'Run length',
+      { section:'Progression', view:'p_fj_length', title:'Run length',
         sub:'Days played per run. The first rent is due at the end of day 5.',
         render:r => barList(r.slice().sort((a,b)=>a.sort_key-b.sort_key).map(d=>[d.bucket, +d.runs]), {fmt:n=>n+' runs'}) },
 
-      { view:'p_fj_endings', title:'Where runs end',
+      { section:'Progression', view:'p_fj_endings', title:'Where runs end',
         sub:'The venue a closed run was at, with its mean days and score.',
-        render:r => scroll(table(r.slice().sort((a,b)=>b.runs-a.runs), [
-          ['venue','Venue'], ['runs','Runs',1], ['mean_days','Mean days',1], ['mean_score','Mean score',1]])) },
+        render:r => scroll(table(r, [
+          ['venue','Venue'], ['runs','Runs',1], ['mean_days','Mean days',1], ['mean_score','Mean score',1]], {sort:'runs'})) },
 
-      { view:'p_fj_shop', title:'The shop',
+      { section:'Economy', view:'p_fj_income', title:'What a day earns',
+        sub:'Median pay plus tips on each day of a run.',
+        render:r => lineChart(r.slice().sort((a,b)=>a.day-b.day), {x:'day', y:'median_income', xLabel:'day', yLabel:'median income'}) },
+
+      { section:'Economy', view:'p_fj_shop', title:'The shop',
         sub:'What players buy, how many runs buy it, and how early.',
-        render:r => scroll(table(r.slice().sort((a,b)=>b.bought-a.bought), [
-          ['item','Item'], ['bought','Bought',1], ['runs','Runs',1], ['mean_day','Mean day',1], ['trade_ins','Trade-ins',1]])) },
+        render:r => scroll(table(r, [
+          ['item','Item'], ['bought','Bought',1], ['runs','Runs',1], ['mean_day','Mean day',1], ['trade_ins','Trade-ins',1]], {sort:'bought'})) },
 
-      { view:'p_fj_walkouts', title:'Walkouts by week',
+      { section:'Behaviour', view:'p_fj_walkouts', title:'Walkouts by week',
         sub:'Mean walkouts per shift, and shifts cut short by three.',
-        render:r => scroll(table(r.slice().sort((a,b)=>a.week-b.week), [
-          ['week','Week',1], ['shifts','Shifts',1], ['mean_walkouts','Mean walkouts',1], ['cut_short','Cut short',1]])) },
+        render:r => scroll(table(r, [
+          ['week','Week',1], ['shifts','Shifts',1], ['mean_walkouts','Mean walkouts',1], ['cut_short','Cut short',1]], {sort:'week', asc:true})) },
 
-      { view:'p_fj_returns', title:'Return sessions',
+      { section:'Behaviour', view:'p_fj_returns', title:'Return sessions',
         sub:'How many players started more than one run.',
         render:r => barList(r.map(d=>[`${d.sessions} run${d.sessions>1?'s':''}`, +d.players]), {fmt:n=>n+' players'}) },
     ],
@@ -174,101 +281,124 @@ const GAMES = {
   'silicon-tycoon': {
     title: 'Silicon Tycoon',
     unit: 'week',
+    colourBy: 'difficulty',
     panels: [
-      { view:'p_st_survival', title:'Survival curve', wide:true,
+      { section:'Survival and progression', view:'p_st_survival', title:'Survival curve', wide:true,
         sub:'Share of runs still going at week N. The flattest line is the kindest difficulty.',
-        render:r => lineChart(r, {x:'week', y:'alive_frac', series:'difficulty', yPct:true, yMax:1}) },
+        render:r => lineChart(r, {x:'week', y:'alive_frac', series:'difficulty', yPct:true, yMax:1, xLabel:'week', w:1360}) },
 
-      { view:'p_st_balance_band', title:'Cash over time', wide:true,
-        sub:'Median balance per difficulty. Below the zero line the run is underwater.',
-        render:r => lineChart(r, {x:'week', y:'median', series:'difficulty', money:true, zeroLine:true}) },
-
-      { view:'p_st_insolvency', title:'When runs go underwater',
-        sub:'First week the balance went negative, and whether it ever came back.',
-        render:r => {
-          const by = groupSum(r, d => d.week_underwater, d => +d.runs);
-          return barList(by, {max:14, fmt:n=>n+' runs', label:w=>`week ${w}`});
-        } },
-
-      { view:'p_st_funnel', title:'Progression funnel',
-        sub:'How far runs get, by difficulty.',
+      { section:'Survival and progression', view:'p_st_funnel', title:'Progression funnel', wide:true,
+        sub:'How far runs get, by difficulty. The marked step is the biggest drop.',
         render:r => funnel(r, ['started','built_line','signed_contract','delivered','ipo']) },
 
-      { view:'p_st_yield', title:'Yield achieved',
-        sub:'What players actually get, against the bench figure.',
-        render:r => scroll(table(r.slice().sort((a,b)=>b.n-a.n), [
-          ['cleanroom','Cleanroom'], ['difficulty','Difficulty'],
-          ['median_yield','Median yield',1,v=>pct(v)],
-          ['median_node_nm','Median node',1], ['n','Samples',1]])) },
+      { section:'Economy', view:'p_st_balance_band', title:'Cash over time', wide:true,
+        sub:'Median balance per difficulty. Below the zero line the run is underwater.',
+        render:r => lineChart(r, {x:'week', y:'median', series:'difficulty', money:true, zeroLine:true, xLabel:'week', w:1360}) },
 
-      { view:'p_st_nodes', title:'Node progression',
+      { section:'Economy', view:'p_st_insolvency', title:'When runs go underwater',
+        sub:'First week the balance went negative.',
+        render:r => barList(groupSum(r, d => d.week_underwater, d => +d.runs), {max:14, fmt:n=>n+' runs', label:w=>`week ${w}`}) },
+
+      { section:'Economy', view:'p_st_nodes', title:'Node progression',
         sub:'Median process node reached, by in-game year. Lower is more advanced.',
         render:r => lineChart(r.slice().sort((a,b)=>a.game_year-b.game_year),
-                    {x:'game_year', y:'median_node_nm', invertY:true, xIsYear:true}) },
+                    {x:'game_year', y:'median_node_nm', invertY:true, xLabel:'year', yLabel:'node (nm)', ySuffix:' nm'}) },
 
-      { view:'p_st_popularity', title:'Starting choices',
+      { section:'Economy', view:'p_st_yield', title:'Yield achieved',
+        sub:'What players actually get, by cleanroom and difficulty.',
+        render:r => scroll(table(r, [
+          ['cleanroom','Cleanroom'], ['difficulty','Difficulty'],
+          ['median_yield','Median yield',1,v=>pct(v)],
+          ['median_node_nm','Median node',1], ['n','Samples',1]], {sort:'n'})) },
+
+      { section:'Economy', view:'p_st_contracts', title:'Contract outcomes',
+        sub:'On time vs late, and what the late fee costs.',
+        render:r => scroll(table(r, [
+          ['difficulty','Difficulty'], ['outcome','Outcome'], ['deliveries','Deliveries',1],
+          ['mean_late_weeks','Mean weeks late',1], ['mean_penalty','Mean penalty',1,v=>money(v)]], {sort:'deliveries'})) },
+
+      { section:'Choices and behaviour', view:'p_st_popularity', title:'Starting choices', wide:true,
         sub:'Which of the 80 combinations get picked.',
         render:r => {
-          const models = groupSum(r, d=>d.model, d=>+d.runs);
-          const eras   = groupSum(r, d=>d.start_year, d=>+d.runs);
-          const diffs  = groupSum(r, d=>d.difficulty, d=>+d.runs);
-          const wrap = document.createElement('div');
-          for (const [name, data] of [['Business model',models],['Difficulty',diffs],['Start era',eras]]) {
-            const h = document.createElement('div');
-            h.className = 'muted'; h.style.cssText='font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:12px 0 6px';
-            h.textContent = name; wrap.append(h, barList(data, {fmt:n=>n+' runs'}));
+          const wrap = h('div', { class:'multiples' });
+          for (const [name, key] of [['Business model','model'],['Difficulty','difficulty'],['Start era','start_year']]) {
+            wrap.append(h('div', {}, h('div', { class:'mult-title' }, name),
+              barList(groupSum(r, d=>d[key], d=>+d.runs), {fmt:n=>n+' runs'})));
           }
           return wrap;
         } },
 
-      { view:'p_st_cleanroom', title:'Cleanroom: leased or bought',
+      { section:'Choices and behaviour', view:'p_st_cleanroom', title:'Cleanroom: leased or bought',
         sub:'Whether the leasing system gets used.',
-        render:r => scroll(table(r.slice().sort((a,b)=>b.runs-a.runs), [
-          ['cleanroom_class','Class'], ['leased_or_bought','Acquired'], ['runs','Runs',1]])) },
-
-      { view:'p_st_contracts', title:'Contract outcomes',
-        sub:'On time vs late, and what the late fee costs.',
         render:r => scroll(table(r, [
-          ['difficulty','Difficulty'], ['outcome','Outcome'], ['deliveries','Deliveries',1],
-          ['mean_late_weeks','Mean weeks late',1], ['mean_penalty','Mean penalty',1,v=>money(v)]])) },
+          ['cleanroom_class','Class'], ['leased_or_bought','Acquired'], ['runs','Runs',1]], {sort:'runs'})) },
 
-      { view:'p_st_pages', title:'Screens opened',
+      { section:'Choices and behaviour', view:'p_st_pages', title:'Screens opened',
         sub:'Share of runs that ever opened each screen.',
         render:r => barList(r.map(d=>[d.page, Math.round(100*d.runs_visiting/Math.max(1,d.total_runs))]),
-                    {fmt:n=>n+'%', max:20}) },
+                    {fmt:n=>n+'%', max:20, sort:true}) },
 
-      { view:'p_st_returns', title:'Return sessions',
+      { section:'Choices and behaviour', view:'p_st_returns', title:'Return sessions',
         sub:'How many players started more than one run.',
         render:r => barList(r.map(d=>[`${d.sessions} run${d.sessions>1?'s':''}`, +d.players]),
                     {fmt:n=>n+' players'}) },
 
-      { view:'p_st_channels', title:'Where runs come from',
-        sub:'itch, GitHub Pages or local, and which build.',
-        render:r => scroll(table(r.slice().sort((a,b)=>b.runs-a.runs), [
-          ['host','Host'], ['build','Build'], ['runs','Runs',1],
-          ['mean_weeks','Mean weeks',1], ['underwater','Underwater',1]])) },
+      { section:'Choices and behaviour', view:'p_st_channels', title:'Channels and builds',
+        sub:'Host and build, with how long and how badly runs went.',
+        render:r => scroll(table(r.map(d => ({...d, host: channelOf(d.host)})), [
+          ['host','Channel'], ['build','Build'], ['runs','Runs',1],
+          ['mean_weeks','Mean weeks',1], ['underwater','Underwater',1]], {sort:'runs'})) },
 
-      { view:'v_runs', title:'Run inspector', wide:true,
-        sub:'Every run, newest first. Click one to see how it went.',
-        render:(rows, ctx) => runList(rows, ctx) },
-
-      { view:'p_st_names', title:'The name wall', wide:true,
+      { section:'Choices and behaviour', view:'p_st_names', title:'The name wall', wide:true,
         sub:'What people called their company.',
         render:r => scroll(table(r, [
           ['company_name','Name'], ['model','Model'], ['difficulty','Difficulty'],
           ['start_year','Era',1], ['weeks_survived','Weeks',1],
-          ['started_at','Started',0,v=>new Date(v).toLocaleDateString()]])) },
+          ['started_at','Started',0,v=>new Date(v).toLocaleDateString()]], {sort:'started_at'})) },
     ],
   },
 };
+
+// Colour is fixed per entity so a filter or a missing series never repaints
+// the rest. Anything not listed takes the next free slot in order.
+const ENTITY_SLOT = {
+  normal:1, scrappy:2, nepo:3, borrowed_time:4,
+  fabless:1, foundry:2, ip_licensor:3, integrated:4,
+  'itch (browser)':1, 'Desktop app':2, 'Local dev (and older desktop builds)':3, 'GitHub Pages (retired)':4, 'Other':5,
+};
+const colourFor = (() => {
+  const extra = new Map();
+  return name => {
+    const slot = ENTITY_SLOT[name] ?? extra.get(name) ?? (extra.set(name, 5 + (extra.size % 2)), extra.get(name));
+    return `var(--s${slot})`;
+  };
+})();
+
+/** The desktop app names itself (desktop-linux, desktop-windows, desktop-mac).
+ *  Before it did, it reported localhost like a dev server, so old desktop runs
+ *  are still mixed into that row and the label says so. */
+function channelOf(host) {
+  const v = String(host || '');
+  if (v.startsWith('desktop-')) return 'Desktop app';
+  if (v.includes('itch.zone') || v.includes('itch.io')) return 'itch (browser)';
+  if (v === 'localhost' || v === '127.0.0.1') return 'Local dev (and older desktop builds)';
+  if (v.endsWith('github.io')) return 'GitHub Pages (retired)';
+  return v ? 'Other' : 'Other';
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Supabase access. Credentials live in this browser's localStorage and are
 // never written to disk by the repo, so nothing here can leak into git.
 // ═══════════════════════════════════════════════════════════════════════════
 const CFG_KEY = 'gt-dashboard-cfg';
+const UI_KEY  = 'gt-dashboard-ui';
 const cfg = JSON.parse(localStorage.getItem(CFG_KEY) || 'null') || {};
+const ui  = Object.assign({ tab:'activity', range:30, theme:null }, safeParse(localStorage.getItem(UI_KEY)));
 let session = null;
+
+function safeParse(s) { try { return JSON.parse(s) || {}; } catch { return {}; } }
+function saveUi() { try { localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch { /* private mode */ } }
+if (ui.theme) document.documentElement.dataset.theme = ui.theme;
 
 async function signIn(url, anonKey, email, password) {
   const r = await fetch(`${url}/auth/v1/token?grant_type=password`, {
@@ -308,259 +438,369 @@ async function q(view, params = '') {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Rendering helpers
+// Small helpers
 // ═══════════════════════════════════════════════════════════════════════════
-const PALETTE = ['var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)'];
+/** Element builder. Text children are always text nodes: labels come from
+ *  player input (company names) and must never be parsed as HTML. */
 const h = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
     if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v;
-    else if (k === 'html') e.innerHTML = v; else e.setAttribute(k, v);
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? '' : v);
   }
-  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : String(k));
+  for (const k of kids.flat()) if (k != null && k !== false) e.append(k.nodeType ? k : String(k));
+  return e;
+};
+const NS = 'http://www.w3.org/2000/svg';
+const s = (tag, attrs = {}, text) => {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) if (v != null) e.setAttribute(k, v);
+  if (text != null) e.textContent = text;
   return e;
 };
 const money = n => {
-  const v = Number(n) || 0, a = Math.abs(v), s = v < 0 ? '-' : '';
-  if (a >= 1e9) return `${s}$${(a/1e9).toFixed(1)}B`;
-  if (a >= 1e6) return `${s}$${(a/1e6).toFixed(1)}M`;
-  if (a >= 1e3) return `${s}$${(a/1e3).toFixed(0)}k`;
-  return `${s}$${a.toFixed(0)}`;
+  const v = Number(n) || 0, a = Math.abs(v), sg = v < 0 ? '-' : '';
+  if (a >= 1e9) return `${sg}$${(a/1e9).toFixed(1)}B`;
+  if (a >= 1e6) return `${sg}$${(a/1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `${sg}$${(a/1e3).toFixed(0)}k`;
+  return `${sg}$${a.toFixed(0)}`;
 };
 const pct = v => `${(Number(v) * 100).toFixed(1)}%`;
+const num = v => Number(v).toLocaleString('en-US');
+const compact = v => { const a = Math.abs(v); return a >= 1e6 ? (v/1e6).toFixed(1)+'M' : a >= 1e3 ? (v/1e3).toFixed(a >= 1e4 ? 0 : 1)+'k' : String(Math.round(v * 10) / 10); };
 const groupSum = (rows, keyFn, valFn) => {
   const m = new Map();
   for (const r of rows) { const k = keyFn(r); m.set(k, (m.get(k) || 0) + (valFn(r) || 0)); }
   return [...m.entries()].sort((a, b) => (typeof a[0] === 'number' ? a[0] - b[0] : b[1] - a[1]));
 };
+const median = xs => { if (!xs.length) return null; const a = xs.slice().sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
+const empty = (msg = 'No data yet') => h('div', { class:'empty' }, msg);
 const scroll = el => h('div', { class:'scroll' }, el);
+const DAY = 864e5;
+const dayKey = t => new Date(t).toISOString().slice(0, 10);
 
-function table(rows, cols) {
-  if (!rows.length) return h('div', { class:'empty' }, 'No data yet');
-  const t = h('table');
-  t.append(h('tr', {}, cols.map(([, label, num]) => h('th', { class: num ? 'num' : '' }, label))));
-  for (const r of rows) {
-    t.append(h('tr', {}, cols.map(([key, , num, fmt]) => {
-      const raw = r[key];
-      const val = raw == null ? '—' : (fmt ? fmt(raw) : raw);
-      return h('td', { class: num ? 'num' : '' }, val);
+// ── Tooltip ────────────────────────────────────────────────────────────────
+// One tooltip for the page. Values lead, labels follow; series are keyed with
+// a short line in their colour. Everything shown here is also in a table.
+const tip = document.getElementById('tip');
+function showTip(x, y, title, rows) {
+  tip.replaceChildren(
+    title ? h('div', { class:'t' }, title) : null,
+    ...rows.map(r => h('div', { class:'r' },
+      r.colour ? h('i', { class:'key', style:`background:${r.colour}` }) : null,
+      h('b', {}, r.value), r.label ? h('span', {}, r.label) : null)));
+  tip.hidden = false;
+  const w = tip.offsetWidth, ht = tip.offsetHeight;
+  tip.style.left = `${Math.min(window.innerWidth - w - 8, x + 14)}px`;
+  tip.style.top  = `${Math.max(8, Math.min(window.innerHeight - ht - 8, y - ht - 10))}px`;
+}
+function hideTip() { tip.hidden = true; }
+/** Hover and keyboard focus show the same tooltip. */
+function tipTarget(el, title, rows) {
+  el.setAttribute('tabindex', '0');
+  const at = (x, y) => showTip(x, y, typeof title === 'function' ? title() : title, typeof rows === 'function' ? rows() : rows);
+  el.addEventListener('pointermove', e => at(e.clientX, e.clientY));
+  el.addEventListener('pointerleave', hideTip);
+  el.addEventListener('focus', () => { const r = el.getBoundingClientRect(); at(r.left + r.width / 2, r.top); });
+  el.addEventListener('blur', hideTip);
+  return el;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Components
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** A sortable table. cols: [key, label, isNumeric, format]. */
+function table(rows, cols, { sort = null, asc = false, cls = '', onRow = null } = {}) {
+  if (!rows.length) return empty();
+  let key = sort, up = asc;
+  const t = h('table', { class:cls });
+  const thead = h('thead'), tbody = h('tbody');
+  t.append(thead, tbody);
+  const draw = () => {
+    const sorted = key == null ? rows : rows.slice().sort((a, b) => {
+      const x = a[key], y = b[key];
+      const nx = Number(x), ny = Number(y);
+      const c = (!isNaN(nx) && !isNaN(ny) && x !== '' && y !== '') ? nx - ny : String(x ?? '').localeCompare(String(y ?? ''));
+      return up ? c : -c;
+    });
+    thead.replaceChildren(h('tr', {}, cols.map(([k, label, isNum]) => {
+      const th = h('th', { class:`sortable${isNum ? ' num' : ''}`, 'aria-sort': k === key ? (up ? 'ascending' : 'descending') : null },
+        label, k === key ? h('span', { class:'arrow' }, up ? '▲' : '▼') : null);
+      th.onclick = () => { if (key === k) up = !up; else { key = k; up = !isNum; } draw(); };
+      return th;
     })));
-  }
+    tbody.replaceChildren(...sorted.map(r => {
+      const tr = h('tr', {}, cols.map(([k, , isNum, fmt]) => {
+        const raw = r[k];
+        return h('td', { class: isNum ? 'num' : '' }, raw == null || raw === '' ? '—' : (fmt ? fmt(raw) : raw));
+      }));
+      if (onRow) { tr.tabIndex = 0; tr.onclick = () => onRow(r); tr.onkeydown = e => { if (e.key === 'Enter') onRow(r); }; }
+      return tr;
+    }));
+  };
+  draw();
   return t;
 }
 
-function barList(pairs, { fmt = String, max = 12, label = String } = {}) {
-  if (!pairs.length) return h('div', { class:'empty' }, 'No data yet');
-  const top = pairs.slice(0, max);
+/** Horizontal bars for magnitude: one hue, 4px rounded data end, values in ink. */
+function barList(pairs, { fmt = String, max = 12, label = String, sort = false } = {}) {
+  if (!pairs.length) return empty();
+  const list = sort ? pairs.slice().sort((a, b) => b[1] - a[1]) : pairs;
+  const top = list.slice(0, max);
   const peak = Math.max(...top.map(p => p[1]), 1);
-  return h('div', {}, top.map(([k, v], i) =>
+  const wrap = h('div', { class:'bars' }, top.map(([k, v]) => tipTarget(
     h('div', { class:'bar-row' },
-      h('div', { class:'muted', style:'overflow:hidden;text-overflow:ellipsis' }, label(k)),
-      h('div', { class:'bar-track' },
-        h('div', { class:'bar-fill', style:`width:${(v/peak)*100}%;background:${PALETTE[i % PALETTE.length]}` })),
-      h('div', { class:'num', style:'text-align:right' }, fmt(v)))));
-}
-
-function funnel(rows, stages) {
-  if (!rows.length) return h('div', { class:'empty' }, 'No data yet');
-  const wrap = h('div');
-  for (const r of rows) {
-    wrap.append(h('div', { class:'muted', style:'font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:12px 0 6px' }, r.difficulty));
-    const base = Math.max(1, +r[stages[0]]);
-    wrap.append(barList(stages.map(s => [s.replace(/_/g, ' '), +r[s]]), {
-      fmt: n => `${n}  ${Math.round(100 * n / base)}%`, max: 9 }));
-  }
+      h('div', { class:'lab', title: String(label(k)) }, label(k)),
+      h('div', { class:'bar-track' }, h('div', { class:'bar-fill', style:`width:${(v / peak) * 100}%` })),
+      h('div', { class:'val' }, fmt(v))),
+    String(label(k)), [{ value: fmt(v) }])));
+  if (list.length > max) wrap.append(h('div', { class:'muted', style:'font-size:11.5px;margin-top:4px' }, `+ ${list.length - max} more`));
   return wrap;
 }
 
-function lineChart(rows, { x, y, series, yPct, money: isMoney, invertY, yMax, zeroLine, xIsYear } = {}) {
-  if (!rows.length) return h('div', { class:'empty' }, 'No data yet');
-  const W = 640, H = 260, P = { l: 58, r: 14, t: 12, b: 30 };
+/** Progression funnel as small multiples, one per difficulty (or one if the
+ *  view has no difficulty). Each step shows the share still in, and the step
+ *  that loses the most players is marked. */
+function funnel(rows, stages) {
+  if (!rows.length) return empty();
+  const multiples = h('div', { class:'multiples' });
+  for (const r of rows) {
+    const counts = stages.map(st => +r[st] || 0);
+    const base = Math.max(1, counts[0]);
+    let worst = -1, worstLoss = -1;
+    for (let i = 1; i < counts.length; i++) {
+      const loss = counts[i - 1] ? 1 - counts[i] / counts[i - 1] : 0;
+      if (loss > worstLoss) { worstLoss = loss; worst = i; }
+    }
+    const name = r.difficulty ?? null;
+    const col = h('div', {},
+      name ? h('div', { class:'mult-title' }, h('i', { class:'keybox', style:`background:${colourFor(name)}` }), name) : null);
+    const bars = h('div', { class:'bars' });
+    stages.forEach((st, i) => {
+      if (i > 0) {
+        const conv = counts[i - 1] ? Math.round(100 * counts[i] / counts[i - 1]) : 0;
+        bars.append(h('div', { class:`step${i === worst ? ' worst' : ''}` },
+          i === worst ? `${conv}% continue · biggest drop` : `${conv}% continue`));
+      }
+      const label = st.replace(/_/g, ' ');
+      bars.append(tipTarget(h('div', { class:'bar-row' },
+        h('div', { class:'lab', title: label }, label),
+        h('div', { class:'bar-track' }, h('div', { class:'bar-fill', style:`width:${(counts[i] / base) * 100}%` })),
+        h('div', { class:'val' }, `${num(counts[i])} · ${Math.round(100 * counts[i] / base)}%`)),
+        `${name ? name + ' · ' : ''}${label}`, [{ value: num(counts[i]), label: 'runs' }, { value: `${Math.round(100 * counts[i] / base)}%`, label: 'of starts' }]));
+    });
+    col.append(bars);
+    multiples.append(col);
+  }
+  return multiples;
+}
+
+/** Line chart, one axis. Hover finds the nearest x with a crosshair and lists
+ *  every series there. Two to four series get a legend and end labels. */
+function lineChart(rows, { x, y, series, yPct, money: isMoney, invertY, yMax, zeroLine, xLabel = '', yLabel = '', ySuffix = '', w = 680 } = {}) {
+  if (!rows.length) return empty();
+  // Drawn at about the card's real width, so 10.5px axis text stays 10.5px.
+  const W = w, H = 270, P = { l: 58, r: series ? 96 : 18, t: 12, b: 32 };
   const groups = new Map();
   for (const r of rows) {
-    const k = series ? (r[series] ?? '—') : 'all';
+    const k = series ? String(r[series] ?? '—') : (yLabel || 'value');
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push({ x: +r[x], y: r[y] == null ? null : +r[y] });
   }
   for (const pts of groups.values()) pts.sort((a, b) => a.x - b.x);
+  const all = [...groups.values()].flat().filter(p => p.y != null && !isNaN(p.y));
+  if (!all.length) return empty();
 
-  const all = [...groups.values()].flat().filter(p => p.y != null);
-  if (!all.length) return h('div', { class:'empty' }, 'No data yet');
   const xs = all.map(p => p.x), ys = all.map(p => p.y);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs) || 1;
-  let y0 = Math.min(0, Math.min(...ys)), y1 = yMax ?? Math.max(...ys);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  let y0 = Math.min(0, ...ys), y1 = yMax ?? Math.max(...ys);
   if (invertY) { y0 = Math.min(...ys); y1 = Math.max(...ys); }
   if (y1 === y0) y1 = y0 + 1;
+  const px = v => P.l + ((v - x0) / ((x1 - x0) || 1)) * (W - P.l - P.r);
+  const py = v => invertY ? P.t + ((v - y0) / (y1 - y0)) * (H - P.t - P.b)
+                          : H - P.b - ((v - y0) / (y1 - y0)) * (H - P.t - P.b);
+  const fmtY = v => yPct ? `${Math.round(v * 100)}%` : isMoney ? money(v) : compact(v) + ySuffix;
 
-  const px = v => P.l + ((v - x0) / (x1 - x0 || 1)) * (W - P.l - P.r);
-  const py = v => invertY
-    ? P.t + ((v - y0) / (y1 - y0)) * (H - P.t - P.b)
-    : H - P.b - ((v - y0) / (y1 - y0)) * (H - P.t - P.b);
-
-  const ns = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  svg.setAttribute('width', '100%');
-  const add = (tag, attrs, text) => {
-    const e = document.createElementNS(ns, tag);
-    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-    if (text != null) e.textContent = text;
-    svg.append(e); return e;
-  };
-  const fmtY = v => yPct ? `${Math.round(v * 100)}%` : isMoney ? money(v) : (v >= 1000 ? (v/1000).toFixed(0)+'k' : v.toFixed(v < 10 ? 1 : 0));
+  const svg = s('svg', { viewBox:`0 0 ${W} ${H}`, width:'100%', role:'img',
+    'aria-label': `${yLabel || y} by ${xLabel || x}` });
   for (let i = 0; i <= 4; i++) {
     const v = y0 + (i / 4) * (y1 - y0), yy = py(v);
-    add('line', { x1:P.l, x2:W-P.r, y1:yy, y2:yy, stroke:'#242c38', 'stroke-width':1 });
-    add('text', { x:P.l-8, y:yy+4, fill:'#8b949e', 'font-size':10, 'text-anchor':'end' }, fmtY(v));
+    svg.append(s('line', { x1:P.l, x2:W - P.r, y1:yy, y2:yy, stroke:'var(--grid)', 'stroke-width':1 }));
+    svg.append(s('text', { x:P.l - 8, y:yy + 3.5, class:'axis', 'text-anchor':'end' }, fmtY(v)));
   }
   if (zeroLine && y0 < 0 && y1 > 0)
-    add('line', { x1:P.l, x2:W-P.r, y1:py(0), y2:py(0), stroke:'#f85149', 'stroke-width':1, 'stroke-dasharray':'3 3', opacity:.7 });
-  for (let i = 0; i <= 4; i++) {
-    const v = x0 + (i / 4) * (x1 - x0);
-    add('text', { x:px(v), y:H-10, fill:'#8b949e', 'font-size':10, 'text-anchor':'middle' },
-        xIsYear ? Math.round(v) : Math.round(v));
+    svg.append(s('line', { x1:P.l, x2:W - P.r, y1:py(0), y2:py(0), stroke:'var(--critical)', 'stroke-width':1, 'stroke-dasharray':'4 3' }));
+  for (let i = 0; i <= 5; i++) {
+    const v = x0 + (i / 5) * (x1 - x0);
+    svg.append(s('text', { x:px(v), y:H - 12, class:'axis', 'text-anchor':'middle' }, Math.round(v)));
   }
-  let ci = 0;
-  const legend = h('div', { class:'legend' });
+  if (xLabel) svg.append(s('text', { x:W - P.r, y:H, class:'axis', 'text-anchor':'end' }, xLabel));
+
+  const legend = series && groups.size > 1
+    ? h('div', { class:'legend' }, [...groups.keys()].map(n => h('span', {}, h('i', { class:'key', style:`background:${colourFor(n)}` }), n)))
+    : null;
+  const ends = [];
   for (const [name, pts] of groups) {
-    const colour = PALETTE[ci++ % PALETTE.length];
-    const d = pts.filter(p => p.y != null).map((p, i) => `${i ? 'L' : 'M'}${px(p.x).toFixed(1)} ${py(p.y).toFixed(1)}`).join(' ');
-    if (d) add('path', { d, fill:'none', stroke:colour, 'stroke-width':2, 'stroke-linejoin':'round' });
-    if (series) legend.append(h('span', {}, h('i', { style:`background:${colour}` }), name));
+    const colour = series ? colourFor(name) : 'var(--s1)';
+    const ok = pts.filter(p => p.y != null && !isNaN(p.y));
+    if (!ok.length) continue;
+    svg.append(s('path', { d: ok.map((p, i) => `${i ? 'L' : 'M'}${px(p.x).toFixed(1)} ${py(p.y).toFixed(1)}`).join(' '),
+      fill:'none', stroke:colour, 'stroke-width':2, 'stroke-linejoin':'round', 'stroke-linecap':'round' }));
+    const last = ok[ok.length - 1];
+    if (series && groups.size <= 4) ends.push({ name, y: py(last.y), x: px(last.x) });
   }
-  return h('div', {}, series ? legend : null, svg);
+  // End labels, nudged apart so they never collide.
+  ends.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
+  // Lines that converge (a survival curve at 0%) would push labels off the
+  // plot. Then the legend alone names them.
+  if (ends.length && ends[ends.length - 1].y <= H - P.b)
+    for (const e of ends) svg.append(s('text', { x: e.x + 6, y: e.y + 4, class:'endlab' }, e.name));
+
+  // Crosshair: snap to the nearest x any series has.
+  const allX = [...new Set(xs)].sort((a, b) => a - b);
+  const cross = s('line', { y1:P.t, y2:H - P.b, stroke:'var(--axis)', 'stroke-width':1, visibility:'hidden' });
+  const dots = s('g', { visibility:'hidden' });
+  svg.append(cross, dots);
+  const hit = s('rect', { x:P.l, y:P.t, width:W - P.l - P.r, height:H - P.t - P.b, fill:'transparent' });
+  svg.append(hit);
+  const at = (clientX, clientY) => {
+    const b = svg.getBoundingClientRect();
+    const vx = (clientX - b.left) * (W / b.width);
+    let best = allX[0];
+    for (const v of allX) if (Math.abs(px(v) - vx) < Math.abs(px(best) - vx)) best = v;
+    cross.setAttribute('x1', px(best)); cross.setAttribute('x2', px(best));
+    cross.setAttribute('visibility', 'visible');
+    dots.replaceChildren(); dots.setAttribute('visibility', 'visible');
+    const rowsAt = [];
+    for (const [name, pts] of groups) {
+      const p = pts.find(q => q.x === best && q.y != null);
+      if (!p) continue;
+      const colour = series ? colourFor(name) : 'var(--s1)';
+      dots.append(s('circle', { cx:px(p.x), cy:py(p.y), r:4, fill:colour, stroke:'var(--surface)', 'stroke-width':2 }));
+      rowsAt.push({ colour, value: fmtY(p.y), label: series ? name : yLabel });
+    }
+    rowsAt.sort((a, b) => 0);
+    showTip(clientX, clientY, `${xLabel || x} ${best}`, rowsAt);
+  };
+  hit.addEventListener('pointermove', e => at(e.clientX, e.clientY));
+  hit.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); dots.setAttribute('visibility', 'hidden'); hideTip(); });
+
+  // The same numbers as a table, one toggle away.
+  const tableRows = allX.map(xv => {
+    const row = { [x]: xv };
+    for (const [name, pts] of groups) { const p = pts.find(q => q.x === xv); row[name] = p?.y; }
+    return row;
+  });
+  const tbl = table(tableRows, [[x, xLabel || x, 1], ...[...groups.keys()].map(n => [n, n, 1, v => fmtY(v)])], { sort: x, asc: true });
+  return chartWithTable(h('div', {}, legend, svg), scroll(tbl));
 }
 
-function runList(rows, ctx) {
-  const sorted = rows.slice().sort((a, b) => +new Date(b.started_at) - +new Date(a.started_at));
-  const t = h('table', { class:'runlist' });
-  t.append(h('tr', {}, ['Company','Model','Difficulty','Era','Weeks','Host','Started']
-    .map((x, i) => h('th', { class: i === 4 ? 'num' : '' }, x))));
-  for (const r of sorted.slice(0, 200)) {
-    const m = r.meta || {};
-    const tr = h('tr', {},
-      h('td', {}, m.company_name || '—'),
-      h('td', {}, m.model || '—'),
-      h('td', {}, m.difficulty || '—'),
-      h('td', {}, m.start_year ?? '—'),
-      h('td', { class:'num' }, r.last_progress ?? 0),
-      h('td', { class:'muted' }, r.host || '—'),
-      h('td', { class:'muted' }, new Date(r.started_at).toLocaleString()));
-    tr.onclick = () => runDetail(r, ctx);
-    t.append(tr);
+/** Vertical bars over days: runs per day, hover per bar. */
+function dayBars(days, { label = 'runs', extra = null } = {}) {
+  if (!days.length) return empty();
+  const W = 1360, H = 220, P = { l: 40, r: 10, t: 10, b: 26 };
+  const peak = Math.max(1, ...days.map(d => d.v));
+  const n = days.length, slot = (W - P.l - P.r) / n, bw = Math.max(1, slot - 2);
+  const py = v => H - P.b - (v / peak) * (H - P.t - P.b);
+  const svg = s('svg', { viewBox:`0 0 ${W} ${H}`, width:'100%', role:'img', 'aria-label': `${label} per day` });
+  for (let i = 0; i <= 3; i++) {
+    const v = Math.round((i / 3) * peak), yy = py(v);
+    svg.append(s('line', { x1:P.l, x2:W - P.r, y1:yy, y2:yy, stroke:'var(--grid)', 'stroke-width':1 }));
+    svg.append(s('text', { x:P.l - 6, y:yy + 3.5, class:'axis', 'text-anchor':'end' }, v));
   }
-  return scroll(t);
+  const every = Math.ceil(n / 8);
+  days.forEach((d, i) => {
+    const x = P.l + i * slot + 1, top = py(d.v), hgt = Math.max(0, H - P.b - top);
+    // 4px rounded top, square to the baseline.
+    const r = Math.min(4, bw / 2, hgt);
+    const path = hgt <= 0 ? '' : `M${x} ${H - P.b}V${top + r}Q${x} ${top} ${x + r} ${top}H${x + bw - r}Q${x + bw} ${top} ${x + bw} ${top + r}V${H - P.b}Z`;
+    const g = s('g', { class:'daybar' });
+    g.append(s('rect', { x: x - 1, y: P.t, width: slot, height: H - P.t - P.b, fill:'transparent' }));
+    if (path) g.append(s('path', { d:path, fill:'var(--seq)' }));
+    svg.append(g);
+    tipTarget(g, new Date(d.day + 'T12:00:00Z').toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' }),
+      [{ value: num(d.v), label }, ...(extra ? extra(d) : [])]);
+    if (i % every === 0) svg.append(s('text', { x: x + bw / 2, y: H - 8, class:'axis', 'text-anchor':'middle' },
+      new Date(d.day + 'T12:00:00Z').toLocaleDateString(undefined, { month:'short', day:'numeric' })));
+  });
+  const tbl = table(days.map(d => ({ day: d.day, v: d.v, ...(d.players != null ? { players: d.players } : {}) })),
+    [['day', 'Day'], ['v', label[0].toUpperCase() + label.slice(1), 1], ...(days[0].players != null ? [['players', 'Players', 1]] : [])],
+    { sort:'day' });
+  return chartWithTable(svg, scroll(tbl));
 }
 
-/** One run, in full. Private to the dashboard — reads runs/events directly. */
-async function runDetail(run, ctx) {
-  const m = run.meta || {};
-  const back = h('button', { class:'backlink' }, '← all panels');
-  back.onclick = () => dashboard(ctx.game);
+/** Parts of a whole as one stacked bar (categorical), with a legend and a table. */
+function shareBar(pairs, { fmt = v => num(v), unit = 'runs' } = {}) {
+  const total = pairs.reduce((a, [, v]) => a + v, 0);
+  if (!total) return empty();
+  const bar = h('div', { class:'share' }, pairs.map(([k, v]) => tipTarget(
+    h('div', { style:`flex:${v};background:${colourFor(k)}` }), k,
+    [{ value: fmt(v), label: unit }, { value: `${Math.round(100 * v / total)}%`, label: 'share' }])));
+  const legend = h('div', { class:'legend' }, pairs.map(([k, v]) =>
+    h('span', {}, h('i', { class:'keybox', style:`background:${colourFor(k)}` }), `${k} · ${Math.round(100 * v / total)}%`)));
+  return h('div', {}, bar, legend);
+}
 
-  const head = h('main', {},
-    h('div', { style:'margin-bottom:6px' }, back),
-    h('h2', { style:'margin:6px 0 2px;font-size:20px' }, m.company_name || '(unnamed)'),
-    h('div', { class:'meta' },
-      h('span', {}, 'model ', h('b', {}, m.model || '—')),
-      h('span', {}, 'difficulty ', h('b', {}, m.difficulty || '—')),
-      h('span', {}, 'era ', h('b', {}, String(m.start_year ?? '—'))),
-      h('span', {}, 'build ', h('b', {}, run.build || '—')),
-      h('span', {}, 'host ', h('b', {}, run.host || '—')),
-      h('span', {}, 'started ', h('b', {}, new Date(run.started_at).toLocaleString())),
-      h('span', {}, 'reached ', h('b', {}, `week ${run.last_progress ?? 0}`))),
-    h('div', { class:'grid', id:'run-grid' }, h('div', { class:'empty' }, 'Loading…')));
-  app.replaceChildren(
-    h('header', {}, h('h1', {}, 'Telemetry'), h('div', { class:'spacer' }),
-      (() => { const b = h('button', {}, 'Sign out'); b.onclick = signOut; return b; })()),
-    head);
+/** A tiny trend line for a stat tile. No axes: the tile's number is the value. */
+function sparkline(values) {
+  const W = 160, H = 30;
+  if (values.length < 2) return null;
+  const peak = Math.max(1, ...values);
+  const pts = values.map((v, i) => `${(i / (values.length - 1)) * W},${H - 2 - (v / peak) * (H - 4)}`);
+  const svg = s('svg', { viewBox:`0 0 ${W} ${H}`, width:'100%', height: H, preserveAspectRatio:'none', 'aria-hidden':'true' });
+  svg.append(s('polyline', { points: pts.join(' '), fill:'none', stroke:'var(--s1)', 'stroke-width':2,
+    'vector-effect':'non-scaling-stroke', 'stroke-linejoin':'round' }));
+  return svg;
+}
 
-  let events = [];
-  try { events = await q('events', `select=name,progress,value,props&run_id=eq.${run.run_id}&limit=5000`); }
-  catch (err) {
-    return document.getElementById('run-grid').replaceChildren(
-      h('div', { class:'card' }, h('h3', {}, 'Could not load events'), h('div', { class:'err' }, err.message)));
-  }
-  events.sort((a, b) => (a.progress ?? 0) - (b.progress ?? 0));
-  const snaps = events.filter(e => e.name === 'snapshot');
-  const grid  = document.getElementById('run-grid');
-  grid.replaceChildren();
+/** Wrap a chart so its numbers are one click away as a table. */
+function chartWithTable(chart, tableEl) {
+  tableEl.hidden = true;
+  const box = h('div', { class:'with-table' }, chart, tableEl);
+  box._toggle = () => { const showing = !tableEl.hidden; tableEl.hidden = showing; chart.hidden = !showing; return !showing; };
+  return box;
+}
 
-  const card = (title, sub, body) => grid.append(h('div', { class:'card wide' },
-    h('h3', {}, title), sub ? h('p', { class:'sub' }, sub) : null, h('div', { class:'body' }, body)));
-
-  if (snaps.length) {
-    // Cash gets its own chart. Balance runs in millions while valuation runs in
-    // billions, so on one linear axis the balance line is flat against zero and
-    // tells you nothing.
-    card('Cash balance', 'Money in the bank, by week. Below the line the run is underwater.',
-      lineChart(snaps.map(s => ({ week:s.progress, v:Number(s.value) })),
-        { x:'week', y:'v', money:true, zeroLine:true }));
-
-    const val = snaps.filter(s => s.props?.valuation != null)
-                     .map(s => ({ series:'valuation', week:s.progress, v:s.props.valuation }));
-    const nw  = snaps.filter(s => s.props?.net_worth != null)
-                     .map(s => ({ series:'net worth', week:s.progress, v:s.props.net_worth }));
-    if (val.length || nw.length)
-      card('Company value', 'Valuation (revenue x prestige multiple) against net worth (assets minus debt).',
-        lineChart([...val, ...nw], { x:'week', y:'v', series:'series', money:true, zeroLine:true }));
-
-    const yields = snaps.filter(s => s.props?.yield != null);
-    if (yields.length) card('Yield and node', 'Mean line yield by week; node shown in the table.',
-      lineChart(yields.map(s => ({ week:s.progress, y:s.props.yield })),
-        { x:'week', y:'y', yPct:true, yMax:1 }));
-
-    card('Snapshots', `${snaps.length} recorded, every 8 weeks.`,
-      scroll(table(snaps.map(s => ({
-        week: s.progress, balance: money(Number(s.value)),
-        valuation: s.props?.valuation != null ? money(s.props.valuation) : '—',
-        net_worth: s.props?.net_worth != null ? money(s.props.net_worth) : '—',
-        node: s.props?.node ?? '—', yield: s.props?.yield != null ? pct(s.props.yield) : '—',
-        cleanroom: s.props?.cleanroom ?? '—', lines: s.props?.lines ?? '—',
-      })), [['week','Week',1],['balance','Balance',1],['valuation','Valuation',1],
-            ['net_worth','Net worth',1],['node','Node',1],['yield','Yield',1],
-            ['cleanroom','Cleanroom'],['lines','Lines',1]])));
-  } else {
-    card('No snapshots', 'This run reported no economy snapshots — it may have been blocked or very short.', h('div', { class:'empty' }, '—'));
-  }
-
-  const pages = events.filter(e => e.name === 'page_view')
-                      .map(e => e.props?.page).filter(Boolean);
-  if (pages.length) card('Screens opened', 'Which screens this run ever visited.',
-    h('div', {}, [...new Set(pages)].join(' · ')));
-
-  const marks = events.filter(e => e.name !== 'snapshot' && e.name !== 'page_view');
-  card('Timeline', `${marks.length} milestone${marks.length === 1 ? '' : 's'}.`,
-    marks.length
-      ? h('ul', { class:'tl' }, marks.map(e => h('li', {},
-          h('span', { class:'w' }, `week ${e.progress ?? 0}`),
-          h('span', {}, h('span', { class:'ev' }, e.name.replace(/_/g, ' ')),
-            Object.keys(e.props || {}).length
-              ? h('span', { class:'px' }, '  ' + Object.entries(e.props)
-                  .map(([k, v]) => `${k}=${v}`).join('  '))
-              : null))))
-      : h('div', { class:'empty' }, 'No milestones recorded'));
+function card(title, sub, body, { wide = false, panel = null } = {}) {
+  const b = h('div', { class:'body' });
+  const toggle = h('button', { class:'viewtoggle', type:'button', hidden:true }, 'Table');
+  const c = h('div', { class: wide ? 'card wide' : 'card', 'data-panel': panel },
+    h('div', { class:'card-head' }, h('div', {}, h('h3', {}, title), sub ? h('p', { class:'sub' }, sub) : null), toggle),
+    b);
+  c._set = el => {
+    b.replaceChildren(el);
+    const wt = el.classList?.contains('with-table') ? el : el.querySelector?.('.with-table');
+    toggle.hidden = !wt;
+    if (wt) toggle.onclick = () => { toggle.textContent = wt._toggle() ? 'Chart' : 'Table'; };
+  };
+  c._set(body ?? empty('Loading…'));
+  return c;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Views
 // ═══════════════════════════════════════════════════════════════════════════
 const app = document.getElementById('app');
+let state = { game: null, games: [], runs: [], fetchedAt: null };
 
 function loginView(msg) {
   const f = h('div', { class:'login' },
     h('h2', {}, 'Game telemetry'),
     h('p', {}, 'Credentials stay in this browser. Nothing is written to the repo.'),
-    h('label', {}, 'Supabase project URL'),
-    h('input', { id:'u', placeholder:'https://xxxx.supabase.co', value: cfg.url || '' }),
-    h('label', {}, 'anon key'),
-    h('input', { id:'k', placeholder:'eyJ…', value: cfg.anonKey || '' }),
-    h('label', {}, 'Email'),
+    h('label', { for:'u' }, 'Supabase project URL'),
+    h('input', { id:'u', type:'text', placeholder:'https://xxxx.supabase.co', value: cfg.url || '' }),
+    h('label', { for:'k' }, 'anon key'),
+    h('input', { id:'k', type:'text', placeholder:'eyJ…', value: cfg.anonKey || '' }),
+    h('label', { for:'e' }, 'Email'),
     h('input', { id:'e', type:'email', autocomplete:'username' }),
-    h('label', {}, 'Password'),
+    h('label', { for:'p' }, 'Password'),
     h('input', { id:'p', type:'password', autocomplete:'current-password' }),
-    h('button', { class:'primary' }, 'Sign in'),
-    msg ? h('div', { class:'err' }, msg) : null,
+    h('button', { class:'primary', type:'button' }, 'Sign in'),
+    msg ? h('div', { class:'err', style:'margin-top:12px' }, msg) : null,
     h('div', { class:'hint' }, 'Create this login in Supabase under Authentication → Users. The anon key alone cannot read anything: row level security grants it INSERT only.'),
   );
   const go = async () => {
@@ -579,67 +819,303 @@ function loginView(msg) {
   return f;
 }
 
-async function dashboard(gameId) {
-  app.replaceChildren(h('main', {}, h('div', { class:'empty' }, 'Loading…')));
-  let games = [];
-  try { games = await q('games', 'select=*'); }
+function headerBar() {
+  const picker = h('select', { 'aria-label':'Game' }, state.games.map(g =>
+    h('option', { value:g.game_id, selected: g.game_id === state.game }, g.title)));
+  picker.onchange = () => dashboard(picker.value);
+  const refresh = h('button', { type:'button' }, 'Refresh');
+  refresh.onclick = () => dashboard(state.game, { keepFrame:true });
+  const dark = document.documentElement.dataset.theme === 'dark'
+    || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+  const theme = h('button', { type:'button', 'aria-label':'Switch colour theme' }, dark ? '☀ Light' : '☾ Dark');
+  theme.onclick = () => {
+    ui.theme = dark ? 'light' : 'dark'; saveUi();
+    document.documentElement.dataset.theme = ui.theme;
+    dashboard(state.game, { keepFrame:true });
+  };
+  const out = h('button', { type:'button' }, 'Sign out'); out.onclick = signOut;
+  const spec = GAMES[state.game];
+  const title = spec?.title || state.game;
+  const tabs = h('div', { class:'tabs', role:'tablist' }, [['activity','Activity'],['insights','Insights'],['runs','Runs']].map(([id, label]) => {
+    const b = h('button', { class:'tab', role:'tab', type:'button', 'aria-selected': String(ui.tab === id), 'data-tab':id }, label);
+    b.onclick = () => { ui.tab = id; saveUi(); showTab(); };
+    return b;
+  }));
+  return h('header', {},
+    h('div', { class:'bar' }, h('span', { class:'brand' }, 'Telemetry'), picker,
+      h('h1', { style:'font-size:15px;margin:0;font-weight:600;color:var(--ink-2)' }, title),
+      h('div', { class:'spacer' }),
+      h('span', { class:'updated' }, state.fetchedAt ? `Updated ${state.fetchedAt.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}` : ''),
+      refresh, theme, out),
+    tabs);
+}
+
+function showTab() {
+  for (const b of document.querySelectorAll('.tab')) b.setAttribute('aria-selected', String(b.dataset.tab === ui.tab));
+  for (const p of document.querySelectorAll('[data-pane]')) p.hidden = p.dataset.pane !== ui.tab;
+  hideTip();
+}
+
+async function dashboard(gameId, { keepFrame = false } = {}) {
+  const main0 = app.querySelector('main');
+  if (keepFrame && main0) main0.classList.add('refetching');
+  else app.replaceChildren(h('main', {}, empty('Loading…')));
+
+  try { state.games = await q('games', 'select=*'); }
   catch (err) {
     if (err.message === 'SESSION_EXPIRED') return app.replaceChildren(loginView('Session expired. Sign in again.'));
     return app.replaceChildren(h('main', {}, h('div', { class:'card' },
       h('h3', {}, 'Could not reach the database'), h('div', { class:'err' }, err.message))));
   }
-  if (!games.length) return app.replaceChildren(h('main', {}, h('div', { class:'card' },
+  if (!state.games.length) return app.replaceChildren(h('main', {}, h('div', { class:'card' },
     h('h3', {}, 'No games registered'),
     h('p', { class:'sub' }, "Insert a row into `games`, e.g. ('silicon-tycoon','Silicon Tycoon','week')."))));
 
-  const active = gameId || games[0].game_id;
-  const spec = GAMES[active];
-
-  const picker = h('select', {}, games.map(g =>
-    h('option', Object.assign({ value:g.game_id }, g.game_id === active ? { selected:'' } : {}), g.title)));
-  picker.onchange = () => dashboard(picker.value);
-  const refresh = h('button', {}, 'Refresh');
-  refresh.onclick = () => dashboard(active);
-  const out = h('button', {}, 'Sign out'); out.onclick = signOut;
-
-  const strip = h('div', { class:'strip' });
-  const grid  = h('div', { class:'grid' });
-  app.replaceChildren(
-    h('header', {}, h('h1', {}, 'Telemetry'), picker, h('div', { class:'spacer' }), refresh, out),
-    h('main', {}, strip, grid));
-
-  // Overview strip, from the generic view every game has.
+  state.game = gameId || state.game || state.games[0].game_id;
+  const spec = GAMES[state.game];
   try {
-    const runs = await q('v_runs', `select=last_progress,started_at,went_underwater&game_id=eq.${active}`);
-    const week = Date.now() - 7 * 864e5;
-    const recent = runs.filter(r => +new Date(r.started_at) > week).length;
-    const lens = runs.map(r => +r.last_progress).sort((a, b) => a - b);
-    const med = lens.length ? lens[Math.floor(lens.length / 2)] : 0;
-    const under = runs.filter(r => r.went_underwater).length;
-    for (const [k, v] of [['Runs', runs.length], ['Last 7 days', recent],
-                          [`Median ${spec?.unit || 'progress'}s`, med],
-                          // Only meaningful for games with a balance that can go negative.
-                          ...(spec?.noUnderwater ? [] : [['Went underwater', runs.length ? Math.round(100 * under / runs.length) + '%' : '—']])])
-      strip.append(h('div', { class:'stat' }, h('div', { class:'v' }, v), h('div', { class:'k' }, k)));
-  } catch { /* strip is a nicety */ }
+    state.runs = await q('v_runs', `select=*&game_id=eq.${state.game}&order=started_at.desc&limit=5000`);
+  } catch { state.runs = []; }
+  state.fetchedAt = new Date();
 
-  if (!spec) return grid.append(h('div', { class:'card' },
-    h('h3', {}, `No panels defined for "${active}"`),
-    h('p', { class:'sub' }, 'Add an entry to the GAMES registry at the top of this file.')));
+  const activity = h('section', { 'data-pane':'activity' });
+  const insights = h('section', { 'data-pane':'insights' });
+  const runsPane = h('section', { 'data-pane':'runs' });
+  app.replaceChildren(headerBar(), h('main', {}, activity, insights, runsPane));
 
-  for (const p of spec.panels) {
-    const card = h('div', { class: p.wide ? 'card wide' : 'card' },
-      h('h3', {}, p.title), p.sub ? h('p', { class:'sub' }, p.sub) : null,
-      h('div', { class:'body' }, h('div', { class:'empty' }, 'Loading…')));
-    grid.append(card);
-    const params = p.view === 'v_runs'
-      ? `select=*&game_id=eq.${active}&order=started_at.desc&limit=200`
-      : 'select=*';
-    q(p.view, params)
-      .then(rows => card.querySelector('.body').replaceChildren(
-        rows.length ? p.render(rows, { game: active, spec }) : h('div', { class:'empty' }, 'No data yet')))
-      .catch(err => card.querySelector('.body').replaceChildren(h('div', { class:'err' }, err.message)));
+  renderActivity(activity, spec);
+  renderInsights(insights, spec);
+  renderRuns(runsPane, spec);
+  showTab();
+}
+
+// ── Activity: everything here is scoped by the range above it ──────────────
+function renderActivity(pane, spec) {
+  const unit = spec?.unit || 'progress';
+  const seg = h('div', { class:'seg', role:'group', 'aria-label':'Date range' },
+    [[7,'7 days'],[30,'30 days'],[90,'90 days'],[0,'All time']].map(([d, label]) => {
+      const b = h('button', { type:'button', 'aria-pressed': String(ui.range === d) }, label);
+      b.onclick = () => { ui.range = d; saveUi(); renderActivity(pane, spec); };
+      return b;
+    }));
+  const now = Date.now();
+  const since = ui.range ? now - ui.range * DAY : -Infinity;
+  const inRange = state.runs.filter(r => +new Date(r.started_at) >= since);
+  const prev = ui.range ? state.runs.filter(r => { const t = +new Date(r.started_at); return t >= since - ui.range * DAY && t < since; }) : null;
+
+  const scope = h('span', { class:'scope' }, 'Scopes every number and chart on this tab. ',
+    h('b', {}, `${num(inRange.length)} runs`), ui.range ? ` in the last ${ui.range} days.` : ' in all.');
+  pane.replaceChildren(h('div', { class:'filters' }, seg, scope));
+
+  // Days in range, oldest first, including days with nothing.
+  const first = inRange.length ? Math.min(...inRange.map(r => +new Date(r.started_at))) : now;
+  const startDay = ui.range ? now - (ui.range - 1) * DAY : first;
+  const days = [];
+  for (let t = startDay; t <= now + 1; t += DAY) days.push(dayKey(t));
+  const perDay = new Map(days.map(d => [d, { day: d, v: 0, set: new Set() }]));
+  for (const r of inRange) {
+    const d = perDay.get(dayKey(r.started_at));
+    if (d) { d.v++; d.set.add(r.player_id); }
   }
+  const dayList = [...perDay.values()].map(d => ({ day: d.day, v: d.v, players: d.set.size }));
+
+  // Stat tiles, each with its change against the previous period of equal length.
+  const players = rs => new Set(rs.map(r => r.player_id)).size;
+  const returning = rs => {
+    const c = new Map(); for (const r of rs) c.set(r.player_id, (c.get(r.player_id) || 0) + 1);
+    const n = c.size; return n ? [...c.values()].filter(v => v > 1).length / n : null;
+  };
+  const med = rs => median(rs.map(r => +r.last_progress || 0));
+  const under = rs => rs.length ? rs.filter(r => r.went_underwater).length / rs.length : null;
+  const tiles = [
+    { k:'Runs started', v:inRange.length, p:prev?.length, spark:dayList.map(d => d.v), fmt:num },
+    { k:'Players', v:players(inRange), p:prev && players(prev), spark:dayList.map(d => d.players), fmt:num },
+    { k:'Played more than once', v:returning(inRange), p:prev && returning(prev), fmt:v => v == null ? '—' : `${Math.round(v * 100)}%`, pts:true },
+    { k:`Median ${unit}s reached`, v:med(inRange), p:prev && med(prev), fmt:v => v == null ? '—' : num(v) },
+    ...(spec?.noUnderwater ? [] : [{ k:'Went underwater', v:under(inRange), p:prev && under(prev),
+      fmt:v => v == null ? '—' : `${Math.round(v * 100)}%`, pts:true, lowerIsBetter:true }]),
+  ];
+  const strip = h('div', { class:'strip' }, tiles.map(t => {
+    let delta = null;
+    if (prev && t.v != null && t.p != null && prev.length) {
+      const diff = t.pts ? Math.round((t.v - t.p) * 100) : (t.p ? Math.round(100 * (t.v - t.p) / t.p) : null);
+      if (diff != null && diff !== 0) {
+        const good = t.lowerIsBetter ? diff < 0 : diff > 0;
+        delta = h('div', { class:'d' }, h('span', { class: good ? 'up' : 'down' }, `${diff > 0 ? '▲' : '▼'} ${Math.abs(diff)}${t.pts ? ' pts' : '%'}`),
+          ` vs previous ${ui.range} days`);
+      } else if (diff === 0) delta = h('div', { class:'d' }, `no change vs previous ${ui.range} days`);
+    }
+    return h('div', { class:'stat' }, h('div', { class:'k' }, t.k), h('div', { class:'v' }, t.fmt(t.v)),
+      delta ?? h('div', { class:'d' }, prev ? 'nothing to compare yet' : 'all time'),
+      t.spark && ui.range ? sparkline(t.spark) : null);
+  }));
+  pane.append(strip);
+
+  if (!inRange.length) { pane.append(h('div', { class:'card' }, empty('No runs in this range. Try a longer one.'))); return; }
+
+  const grid = h('div', { class:'grid' });
+  pane.append(grid);
+  grid.append(card('Runs per day', 'Hover a day for runs and distinct players.',
+    dayBars(dayList, { label:'runs', extra: d => [{ value: num(d.players), label:'players' }] }), { wide:true }));
+
+  const channels = groupSum(inRange, r => channelOf(r.host), () => 1);
+  const osOf = host => String(host).startsWith('desktop-') ? String(host).slice(8) : null;
+  const chTable = table(channels.map(([k, v]) => {
+    const rs = inRange.filter(r => channelOf(r.host) === k);
+    const oses = [...new Set(rs.map(r => osOf(r.host)).filter(Boolean))].sort();
+    return { channel: oses.length ? `${k} (${oses.join(', ')})` : k, runs:v, share: Math.round(100 * v / inRange.length) + '%', med: med(rs) };
+  }), [['channel','Channel'], ['runs','Runs',1], ['share','Share',1], ['med',`Median ${unit}s`,1]], { sort:'runs' });
+  grid.append(card('Where runs come from',
+    'Desktop runs name their OS in the table. Desktop runs from before the app named itself are counted as local dev.',
+    h('div', {}, shareBar(channels), chTable)));
+
+  const builds = groupSum(inRange, r => r.build || 'unknown', () => 1);
+  grid.append(card('Builds in play', 'Runs per build in this range, newest release first when tied.',
+    scroll(table(builds.map(([b, v]) => {
+      const rs = inRange.filter(r => (r.build || 'unknown') === b);
+      const last = Math.max(...rs.map(r => +new Date(r.started_at)));
+      return { build:b, runs:v, share: Math.round(100 * v / inRange.length) + '%', last: new Date(last).toISOString() };
+    }), [['build','Build'], ['runs','Runs',1], ['share','Share',1], ['last','Last seen',0,v=>new Date(v).toLocaleDateString()]], { sort:'runs' }))));
+
+  // How far runs got, bucketed so a long tail stays readable.
+  const lens = inRange.map(r => +r.last_progress || 0);
+  const peak = Math.max(...lens, 1);
+  const step = peak <= 20 ? 2 : peak <= 60 ? 5 : peak <= 200 ? 20 : peak <= 600 ? 50 : 100;
+  const buckets = new Map();
+  for (const v of lens) { const b = Math.floor(v / step) * step; buckets.set(b, (buckets.get(b) || 0) + 1); }
+  grid.append(card(`How far runs got`, `${unit[0].toUpperCase() + unit.slice(1)}s reached per run, in steps of ${step}.`,
+    barList([...buckets.entries()].sort((a, b) => a[0] - b[0]).map(([b, v]) => [`${b}–${b + step - 1}`, v]),
+      { fmt: n => `${n} run${n === 1 ? '' : 's'}`, max: 16 })));
+}
+
+// ── Insights: the SQL panels, all time, grouped into sections ──────────────
+function renderInsights(pane, spec) {
+  pane.replaceChildren(h('div', { class:'filters' }, h('span', { class:'scope' },
+    h('b', {}, 'All time. '), 'These panels are aggregated in the database across every run, so the date range does not apply to them.')));
+  if (!spec) {
+    pane.append(h('div', { class:'card' }, h('h3', {}, `No panels defined for "${state.game}"`),
+      h('p', { class:'sub' }, 'Add an entry to the GAMES registry at the top of this file.')));
+    return;
+  }
+  let section = null, grid = null;
+  for (const p of spec.panels) {
+    if (p.section !== section) {
+      section = p.section;
+      pane.append(h('h2', { class:'section' }, section));
+      grid = h('div', { class:'grid two' });
+      pane.append(grid);
+    }
+    const c = card(p.title, p.sub, null, { wide: p.wide, panel: p.view });
+    grid.append(c);
+    q(p.view, 'select=*')
+      .then(rows => c._set(rows.length ? p.render(rows, { game: state.game, spec }) : empty()))
+      .catch(err => c._set(h('div', { class:'err' }, err.message)));
+  }
+}
+
+// ── Runs: every run, searchable, click for the story ───────────────────────
+function runName(r) {
+  const m = r.meta || {};
+  return m.company_name || m.name || m.initials || String(r.run_id).slice(0, 8);
+}
+function runDetails(r) {
+  const m = r.meta || {};
+  return Object.entries(m).filter(([k]) => !['company_name', 'name', 'initials'].includes(k))
+    .map(([k, v]) => `${k.replace(/_/g, ' ')} ${v}`).join(' · ');
+}
+function renderRuns(pane, spec) {
+  const search = h('input', { type:'search', placeholder:'Search name, channel, build, details…', style:'min-width:280px',
+    'aria-label':'Search runs', value: ui.search || '' });
+  const count = h('span', { class:'scope' });
+  const body = h('div');
+  pane.replaceChildren(h('div', { class:'filters' }, search, count), h('div', { class:'card wide' },
+    h('div', { class:'card-head' }, h('div', {}, h('h3', {}, 'Run inspector'),
+      h('p', { class:'sub' }, 'Newest first. Click a run, or focus it and press Enter, to see how it went.'))), body));
+  const rows = state.runs.map(r => ({
+    _run: r, started: r.started_at, name: runName(r), details: runDetails(r),
+    progress: +r.last_progress || 0, channel: channelOf(r.host), build: r.build || '—',
+  }));
+  const draw = () => {
+    const needle = (search.value || '').trim().toLowerCase();
+    const hits = needle ? rows.filter(r => `${r.name} ${r.details} ${r.channel} ${r.build}`.toLowerCase().includes(needle)) : rows;
+    count.textContent = `${num(hits.length)} of ${num(rows.length)} runs`;
+    body.replaceChildren(hits.length ? scroll(table(hits.slice(0, 500), [
+      ['name','Name'], ['details','Details'], ['progress',`${(spec?.unit || 'progress')[0].toUpperCase() + (spec?.unit || 'progress').slice(1)}s`,1],
+      ['channel','Channel'], ['build','Build'], ['started','Started',0,v=>new Date(v).toLocaleString()]],
+      { sort:'started', cls:'runlist', onRow: r => runDetail(r._run, spec) })) : empty('No runs match.'));
+  };
+  search.oninput = () => { ui.search = search.value; draw(); };
+  draw();
+}
+
+/** One run, in full. Private to the dashboard: reads runs/events directly. */
+async function runDetail(run, spec) {
+  hideTip();
+  const m = run.meta || {};
+  const back = h('button', { class:'backlink', type:'button' }, '← back to runs');
+  back.onclick = () => { ui.tab = 'runs'; dashboard(state.game); };
+  const unit = spec?.unit || 'progress';
+  app.replaceChildren(headerBar(), h('main', {},
+    h('div', { style:'margin-bottom:6px' }, back),
+    h('h2', { style:'margin:6px 0 2px;font-size:20px' }, runName(run)),
+    h('div', { class:'meta' },
+      ...Object.entries(m).filter(([k]) => k !== 'company_name').map(([k, v]) => h('span', {}, `${k.replace(/_/g, ' ')} `, h('b', {}, String(v)))),
+      h('span', {}, 'build ', h('b', {}, run.build || '—')),
+      h('span', {}, 'channel ', h('b', {}, channelOf(run.host))),
+      h('span', {}, 'started ', h('b', {}, new Date(run.started_at).toLocaleString())),
+      h('span', {}, 'reached ', h('b', {}, `${unit} ${run.last_progress ?? 0}`))),
+    h('div', { class:'grid', id:'run-grid' }, empty('Loading…'))));
+
+  let events = [];
+  try { events = await q('events', `select=name,progress,value,props&run_id=eq.${run.run_id}&limit=5000`); }
+  catch (err) {
+    return document.getElementById('run-grid').replaceChildren(
+      h('div', { class:'card' }, h('h3', {}, 'Could not load events'), h('div', { class:'err' }, err.message)));
+  }
+  events.sort((a, b) => (a.progress ?? 0) - (b.progress ?? 0));
+  const snaps = events.filter(e => e.name === 'snapshot');
+  const grid = document.getElementById('run-grid');
+  grid.replaceChildren();
+  const add = (title, sub, body) => { const c = card(title, sub, body, { wide:true }); grid.append(c); };
+
+  if (snaps.length) {
+    // Cash gets its own chart. Balance runs in millions while valuation runs in
+    // billions, so on one axis the balance line is flat against zero.
+    add('Cash balance', 'Money in the bank. Below the dashed line the run is underwater.',
+      lineChart(snaps.map(s => ({ week:s.progress, v:Number(s.value) })), { x:'week', y:'v', money:true, zeroLine:true, xLabel:unit, yLabel:'balance', w:1360 }));
+    const val = snaps.filter(s => s.props?.valuation != null).map(s => ({ series:'valuation', week:s.progress, v:s.props.valuation }));
+    const nw  = snaps.filter(s => s.props?.net_worth != null).map(s => ({ series:'net worth', week:s.progress, v:s.props.net_worth }));
+    if (val.length || nw.length)
+      add('Company value', 'Valuation (revenue × prestige multiple) against net worth (assets minus debt).',
+        lineChart([...val, ...nw], { x:'week', y:'v', series:'series', money:true, zeroLine:true, xLabel:unit, w:1360 }));
+    const yields = snaps.filter(s => s.props?.yield != null);
+    if (yields.length) add('Yield', 'Mean line yield.',
+      lineChart(yields.map(s => ({ week:s.progress, y:s.props.yield })), { x:'week', y:'y', yPct:true, yMax:1, xLabel:unit, yLabel:'yield', w:1360 }));
+    add('Snapshots', `${snaps.length} recorded.`, scroll(table(snaps.map(s => ({
+      week: s.progress, balance: Number(s.value),
+      valuation: s.props?.valuation ?? null, net_worth: s.props?.net_worth ?? null,
+      node: s.props?.node ?? null, yield: s.props?.yield ?? null,
+      cleanroom: s.props?.cleanroom ?? null, lines: s.props?.lines ?? null, speed: s.props?.clock_speed ?? null,
+    })), [['week', unit[0].toUpperCase() + unit.slice(1), 1], ['balance','Balance',1,money], ['valuation','Valuation',1,money],
+          ['net_worth','Net worth',1,money], ['node','Node',1], ['yield','Yield',1,pct],
+          ['cleanroom','Cleanroom'], ['lines','Lines',1], ['speed','Clock speed',1]], { sort:'week', asc:true })));
+  } else {
+    add('No snapshots', 'This run reported no economy snapshots: it may have been blocked or very short.', empty('—'));
+  }
+
+  const pages = events.filter(e => e.name === 'page_view').map(e => e.props?.page).filter(Boolean);
+  if (pages.length) add('Screens opened', 'Which screens this run ever visited.', h('div', {}, [...new Set(pages)].join(' · ')));
+
+  const marks = events.filter(e => e.name !== 'snapshot' && e.name !== 'page_view');
+  add('Timeline', `${marks.length} milestone${marks.length === 1 ? '' : 's'}.`,
+    marks.length
+      ? h('ul', { class:'tl' }, marks.map(e => h('li', {},
+          h('span', { class:'w' }, `${unit} ${e.progress ?? 0}`),
+          h('span', {}, h('span', { class:'ev' }, e.name.replace(/_/g, ' ')),
+            Object.keys(e.props || {}).length
+              ? h('span', { class:'px' }, '  ' + Object.entries(e.props).map(([k, v]) => `${k}=${v}`).join('  '))
+              : null))))
+      : empty('No milestones recorded'));
 }
 
 (async () => { app.replaceChildren(await resume() ? h('div') : loginView()); if (session) dashboard(); })();
